@@ -1066,6 +1066,7 @@ if st.session_state.gdf is not None:
                 st.info("Need at least 2 numeric attributes for correlation analysis.")
     
     
+    
     with tab6:
         st.markdown("### Export & Reports")
         st.markdown("<br>", unsafe_allow_html=True)
@@ -1086,7 +1087,7 @@ if st.session_state.gdf is not None:
                 st.markdown("##### CSV Export")
                 csv_data = gdf.to_csv(index=False)
                 st.download_button(
-                    label="Download CSV",
+                    label="📥 Download CSV",
                     data=csv_data,
                     file_name=f"{st.session_state.active_dataset}_{datetime.now().strftime('%Y%m%d')}.csv",
                     mime="text/csv",
@@ -1097,7 +1098,7 @@ if st.session_state.gdf is not None:
                 st.markdown("##### GeoJSON Export")
                 geojson_data = gdf.to_json()
                 st.download_button(
-                    label="Download GeoJSON",
+                    label="📥 Download GeoJSON",
                     data=geojson_data,
                     file_name=f"{st.session_state.active_dataset}_{datetime.now().strftime('%Y%m%d')}.geojson",
                     mime="application/json",
@@ -1115,7 +1116,7 @@ if st.session_state.gdf is not None:
                 
                 excel_data = output.getvalue()
                 st.download_button(
-                    label="Download Excel",
+                    label="📥 Download Excel",
                     data=excel_data,
                     file_name=f"{st.session_state.active_dataset}_{datetime.now().strftime('%Y%m%d')}.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1175,12 +1176,16 @@ if st.session_state.gdf is not None:
                         
                         if include_geometry:
                             info = analyze_geometry(gdf)
+                            
+                            # Handle None value for total_area_km2
+                            area_text = f"{info['total_area_km2']:.2f} km²" if info['total_area_km2'] is not None else "N/A (not applicable for this geometry type)"
+                            
                             report_content += f"""
 ## Geometry Analysis
 
 - **Feature Count:** {info['feature_count']:,}
 - **Geometry Type:** {', '.join(info['geometry_type'])}
-- **Total Area:** {info['total_area_km2']:.2f} km² (if applicable)
+- **Total Area:** {area_text}
 - **CRS:** {info['crs']}
 - **Bounding Box:** 
   - Min Lon: {info['bounds'][0]:.6f}
