@@ -70,13 +70,20 @@ def _load_shapefile_zip(uploaded_file):
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(tmpdir)
 
-        shp_files = [f for f in os.listdir(tmpdir) if f.endswith(".shp")]
+        # Search recursively for .shp file
+        shp_path = None
+        for root, dirs, files in os.walk(tmpdir):
+            for file in files:
+                if file.lower().endswith(".shp"):
+                    shp_path = os.path.join(root, file)
+                    break
+            if shp_path:
+                break
 
-        if not shp_files:
+        if shp_path is None:
             raise ValueError("No .shp file found inside ZIP")
-
-        shp_path = os.path.join(tmpdir, shp_files[0])
 
         gdf = gpd.read_file(shp_path)
 
     return gdf
+
