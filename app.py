@@ -11,13 +11,22 @@ import geopandas as gpd
 from shapely.geometry import Point
 import io
 from datetime import datetime
+import time
 
 from engine.loader import load_spatial_data
 from engine.geometry import analyze_geometry
 
+# ==================== DEMO CONFIGURATION ====================
+DEMO_MODE = True  # Set to False for full version
+MAX_FEATURES_DEMO = 100
+MAX_FILE_SIZE_MB = 5
+SESSION_DURATION_MINUTES = 5
+# ============================================================
+
 # Page config with custom theme
+page_title = "Smart Geo Data Explorer - DEMO" if DEMO_MODE else "Smart Geo Data Explorer"
 st.set_page_config(
-    page_title="Smart Geo Data Explorer", 
+    page_title=page_title, 
     page_icon="🗺️",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -38,6 +47,22 @@ st.markdown("""
         color: #6c757d;
         font-size: 1.1rem;
         margin-bottom: 2rem;
+    }
+    .demo-banner {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        color: white;
+        padding: 1rem;
+        border-radius: 10px;
+        text-align: center;
+        margin-bottom: 1rem;
+        font-weight: 600;
+    }
+    .upgrade-box {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1.5rem;
+        border-radius: 10px;
+        margin: 1rem 0;
     }
     .metric-card {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -88,10 +113,32 @@ if 'active_dataset' not in st.session_state:
     st.session_state.active_dataset = None
 if 'spatial_operation_result' not in st.session_state:
     st.session_state.spatial_operation_result = None
+if 'session_start' not in st.session_state:
+    st.session_state.session_start = time.time()
+
+# Check session duration in demo mode
+if DEMO_MODE:
+    session_duration = (time.time() - st.session_state.session_start) / 60
+    remaining_time = SESSION_DURATION_MINUTES - session_duration
+    
+    if session_duration > SESSION_DURATION_MINUTES:
+        st.error(f"⏰ Demo session expired ({SESSION_DURATION_MINUTES} min limit). Refresh to start a new session!")
+        st.markdown("""
+        <div class="upgrade-box">
+            <h3>Want Unlimited Access?</h3>
+            <p><strong>Contact:</strong> mariah.elsandakli@gmail.com</p>
+        </div>
+        """, unsafe_allow_html=True)
+        st.stop()
 
 # Sidebar
 with st.sidebar:
     st.markdown("### Smart Geo Data Explorer")
+    
+    if DEMO_MODE:
+        # st.markdown('<div class="demo-banner">🔒 DEMO VERSION</div>', unsafe_allow_html=True)
+        st.caption(f"⏰ Session: {int(remaining_time)} min remaining")
+    
     st.markdown("---")
     
     # Dataset Management
@@ -121,7 +168,14 @@ with st.sidebar:
     # Quick Stats
     if st.session_state.gdf is not None:
         st.markdown("#### Quick Stats")
-        st.metric("Features", f"{len(st.session_state.gdf):,}")
+        original_count = len(st.session_state.gdf)
+        
+        if DEMO_MODE and original_count > MAX_FEATURES_DEMO:
+            st.metric("Features", f"{MAX_FEATURES_DEMO} / {original_count}")
+            st.caption("🔒 Limited in demo")
+        else:
+            st.metric("Features", f"{len(st.session_state.gdf):,}")
+        
         st.metric("Columns", len(st.session_state.gdf.columns))
         
         geom_type = st.session_state.gdf.geometry.geom_type.mode()[0] if len(st.session_state.gdf) > 0 else "Unknown"
@@ -134,6 +188,15 @@ with st.sidebar:
 # Main header
 st.markdown('<h1 class="main-header">Smart Geo Data Explorer</h1>', unsafe_allow_html=True)
 st.markdown('<p class="sub-header">Analyze and visualize your spatial data in seconds</p>', unsafe_allow_html=True)
+
+# Demo Banner
+if DEMO_MODE:
+    st.markdown(f"""
+    <div class="demo-banner">
+        🔒 DEMO VERSION - Limited to {MAX_FEATURES_DEMO} features, {MAX_FILE_SIZE_MB}MB files, {SESSION_DURATION_MINUTES}-minute sessions | 
+        <a href="mailto:mariah.elsandakli@gmail.com" style="color: white; text-decoration: underline;">Upgrade to Full Access</a>
+    </div>
+    """, unsafe_allow_html=True)
 
 # File uploader in main area
 st.markdown("### 📤 Upload Your Data")
@@ -152,10 +215,36 @@ with col2:
         dataset_name = st.text_input("Dataset Name", value=uploaded_file.name.split('.')[0])
 
 if uploaded_file is not None and uploaded_file != st.session_state.uploaded_file:
+    # Check file size in demo mode
+    if DEMO_MODE:
+        file_size_mb = uploaded_file.size / (1024 * 1024)
+        if file_size_mb > MAX_FILE_SIZE_MB:
+            st.error(f"⚠️ Demo version limited to {MAX_FILE_SIZE_MB}MB files. Your file is {file_size_mb:.1f}MB.")
+            st.markdown("""
+            <div class="upgrade-box">
+                <h4>Need to analyze larger datasets?</h4>
+                <p>Full version supports files of any size!</p>
+                <p><strong>Contact:</strong> mariah.elsandakli@gmail.com</p>
+            </div>
+            """, unsafe_allow_html=True)
+            st.stop()
+    
     st.session_state.uploaded_file = uploaded_file
     with st.spinner('Processing your data...'):
         try:
             loaded_gdf = load_spatial_data(uploaded_file)
+            
+            # Apply demo limit
+            original_count = len(loaded_gdf)
+            if DEMO_MODE and original_count > MAX_FEATURES_DEMO:
+                st.warning(f"🔒 Demo Version: Your dataset has {original_count:,} features. Showing first {MAX_FEATURES_DEMO} for demo purposes.")
+                loaded_gdf = loaded_gdf.head(MAX_FEATURES_DEMO)
+                
+                st.info(f"""
+                **Want to analyze all {original_count:,} features?** 
+                Upgrade to full access for unlimited feature support!
+                [Contact](mailto:mariah.elsandakli@gmail.com)
+                """)
             
             # Add to datasets collection
             if dataset_name:
@@ -262,7 +351,6 @@ if st.session_state.gdf is not None:
         
         # Advanced Filtering Section
         with st.expander("🔍 Advanced Filters", expanded=False):
-            st.markdown('<div class="filter-section">', unsafe_allow_html=True)
             
             filter_col1, filter_col2 = st.columns(2)
             
@@ -1081,47 +1169,73 @@ if st.session_state.gdf is not None:
         if report_type == "Data Export":
             st.markdown("#### Data Export Options")
             
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                st.markdown("##### CSV Export")
+            if DEMO_MODE:
+                st.warning("🔒 Demo version: Only CSV export available. Upgrade for GeoJSON, Excel, and more!")
+                
                 csv_data = gdf.to_csv(index=False)
                 st.download_button(
-                    label="📥 Download CSV",
+                    label="📥 Download CSV (Demo)",
                     data=csv_data,
-                    file_name=f"{st.session_state.active_dataset}_{datetime.now().strftime('%Y%m%d')}.csv",
+                    file_name=f"{st.session_state.active_dataset}_demo.csv",
                     mime="text/csv",
                     use_container_width=True
                 )
-            
-            with col2:
-                st.markdown("##### GeoJSON Export")
-                geojson_data = gdf.to_json()
-                st.download_button(
-                    label="📥 Download GeoJSON",
-                    data=geojson_data,
-                    file_name=f"{st.session_state.active_dataset}_{datetime.now().strftime('%Y%m%d')}.geojson",
-                    mime="application/json",
-                    use_container_width=True
-                )
-            
-            with col3:
-                st.markdown("##### Excel Export")
-                # Convert to Excel
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                    # Drop geometry for Excel
-                    df_export = pd.DataFrame(gdf.drop(columns=['geometry']))
-                    df_export.to_excel(writer, sheet_name='Data', index=False)
                 
-                excel_data = output.getvalue()
-                st.download_button(
-                    label="📥 Download Excel",
-                    data=excel_data,
-                    file_name=f"{st.session_state.active_dataset}_{datetime.now().strftime('%Y%m%d')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True
-                )
+                st.markdown("""
+                <div class="upgrade-box">
+                    <h4>Unlock All Export Formats</h4>
+                    <p>Full version includes:</p>
+                    <ul>
+                        <li>GeoJSON export</li>
+                        <li>Excel export</li>
+                        <li>Shapefile export</li>
+                        <li>KML export</li>
+                    </ul>
+                    <p><strong>Contact:</strong> mariah.elsandakli@gamil.com</p>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.markdown("##### CSV Export")
+                    csv_data = gdf.to_csv(index=False)
+                    st.download_button(
+                        label="📥 Download CSV",
+                        data=csv_data,
+                        file_name=f"{st.session_state.active_dataset}_{datetime.now().strftime('%Y%m%d')}.csv",
+                        mime="text/csv",
+                        use_container_width=True
+                    )
+                
+                with col2:
+                    st.markdown("##### GeoJSON Export")
+                    geojson_data = gdf.to_json()
+                    st.download_button(
+                        label="📥 Download GeoJSON",
+                        data=geojson_data,
+                        file_name=f"{st.session_state.active_dataset}_{datetime.now().strftime('%Y%m%d')}.geojson",
+                        mime="application/json",
+                        use_container_width=True
+                    )
+                
+                with col3:
+                    st.markdown("##### Excel Export")
+                    # Convert to Excel
+                    output = io.BytesIO()
+                    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                        # Drop geometry for Excel
+                        df_export = pd.DataFrame(gdf.drop(columns=['geometry']))
+                        df_export.to_excel(writer, sheet_name='Data', index=False)
+                    
+                    excel_data = output.getvalue()
+                    st.download_button(
+                        label="📥 Download Excel",
+                        data=excel_data,
+                        file_name=f"{st.session_state.active_dataset}_{datetime.now().strftime('%Y%m%d')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True
+                    )
         
         elif report_type == "Analysis Report":
             st.markdown("#### Generate Analysis Report")
@@ -1234,6 +1348,24 @@ if st.session_state.gdf is not None:
                         ).add_to(m)
                         
                         folium.LayerControl().add_to(m)
+                        
+                        # Add demo watermark
+                        if DEMO_MODE:
+                            watermark_html = '''
+                            <div style="position: fixed; 
+                                        bottom: 50px; 
+                                        right: 10px; 
+                                        background-color: rgba(255,255,255,0.9);
+                                        padding: 10px 15px;
+                                        border-radius: 8px;
+                                        font-size: 13px;
+                                        font-weight: 600;
+                                        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                                        z-index: 9999;">
+                                🔒 DEMO VERSION - <a href="mailto:mariah.elsandakli@gmail.com">Upgrade to Full Version</a>
+                            </div>
+                            '''
+                            m.get_root().html.add_child(folium.Element(watermark_html))
                         
                         # Save to HTML
                         html_data = m._repr_html_()
